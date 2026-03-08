@@ -2,9 +2,14 @@ name: News Bot Auto Run
 
 on:
   schedule:
-    # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට (Every 15 minutes)
+    # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට
     - cron: '*/15 * * * *'
-  workflow_dispatch: # අපට අවශ්‍ය වෙලාවට manual රන් කිරීමට
+  workflow_dispatch: # Manual run කිරීමට
+
+# එකම අවස්ථාවේ පණිවිඩ යැවීම් කිහිපයක් සිදුවීම වැළැක්වීමට
+concurrency:
+  group: news-bot-sync
+  cancel-in-progress: true
 
 jobs:
   build:
