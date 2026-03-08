@@ -5,15 +5,16 @@ from deep_translator import GoogleTranslator
 import os
 import time
 import random
+from threading import Thread
 
 # GitHub Secrets මගින් දත්ත ලබා ගැනීම
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
+LOG_FILE = "processed_urls.txt"
 
 def send_telegram_msg(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        # පණිවිඩය දිග වැඩි නම් කොටස් වලට බෙදා යවයි
         if len(message) > 4000:
             for i in range(0, len(message), 4000):
                 requests.post(url, data={'chat_id': CHAT_ID, 'text': message[i:i+4000], 'parse_mode': 'Markdown'}, timeout=15)
@@ -22,124 +23,150 @@ def send_telegram_msg(message):
     except:
         requests.post(url, data={'chat_id': CHAT_ID, 'text': message}, timeout=15)
 
+def keep_alive_ping():
+    """සෑම විනාඩි 02කටම වරක් බොට් ක්‍රියාත්මක බව ටෙලිග්‍රෑම් වෙත දන්වයි"""
+    while True:
+        send_telegram_msg("🟢 *[SYSTEM CHECK]* බොට් පද්ධතිය සක්‍රීයව පවතිනවා (24/7 Live Status)...")
+        time.sleep(120) # තත්පර 120 (විනාඩි 02)
+
 def simplify_sinhala(text):
-    """පරිවර්තනය වූ සිංහල තවදුරටත් සරල කථන ශෛලියට හැරවීම"""
+    """පරිවර්තනය වූ සිංහල සරල කථන ශෛලියකට සහ විශ්ලේෂණාත්මක ස්වරූපයකට හැරවීම"""
     replacements = {
-        "ප්‍රකාශ කළේය": "කිව්වා", "සිදු කරනු ලබයි": "කරනවා", "නිරීක්ෂණය කරන ලදී": "දැකගන්න ලැබුණා",
-        "භාවිතා කරමින්": "පාවිච්චි කරලා", "සමගින්": "එක්ක", "විසින්": "මගින්",
-        "පැවැත්වූයේය": "පැවැත්වුවා", "අනාවරණය විය": "හෙළි වුණා", "නිරත විය": "යෙදුණා"
+        "ප්‍රකාශ කළේය": "පැවසුවා", "සිදු කරනු ලබයි": "කරනවා", "නිරීක්ෂණය විය": "දැකගන්න ලැබුණා",
+        "විසින්": "මගින්", "පැවැත්වූයේය": "පැවැත්වුවා", "අනාවරණය විය": "හෙළි වුණා",
+        "භාවිතා කරමින්": "පාවිච්චි කරලා", "සමගින්": "එක්ක", "යුධ ගැටුම්": "සටන්",
+        "ආර්ථික අර්බුදය": "සල්ලි ප්‍රශ්න", "විමර්ශනය": "පරීක්ෂණය", "අවස්ථාවන්හිදී": "වෙලාවල් වලදී"
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
     return text
 
-def make_clickbait(title):
-    """මාතෘකාව කුතුහලය දනවන ලෙස වෙනස් කිරීම"""
-    prefixes = ["මෙන්න අද ලෝකයම කතා වෙන ", "කිසිවෙකු නොකියූ ", "සැඟවුණු ඇත්ත හෙළිවෙයි: ", "අවසානය වෙනස්ම එකක්: "]
-    return random.choice(prefixes) + title
+def create_clickbait_title(title):
+    """කුතුහලය දනවන සහ නරඹන්නා පොළඹවන මාතෘකා සැකසීම"""
+    hooks = [
+        "ලෝකයම කැළඹූ රහස මෙන්න: ", "අවසානයේදී ඇත්ත හෙළිවෙයි! ", "මේක අහලවත් තිබුණද? ",
+        "කාටවත් කියන්න එපා! ", "විශේෂ හෙළිදරව්ව: ", "අද දවසේ උණුසුම්ම පුවත: ",
+        "මීට පෙර කිසිවෙකු නොකී ඇත්ත: "
+    ]
+    return random.choice(hooks) + title
 
 def get_sources():
-    """ලෝකයේ අඩවි 20ක්, Google Trends 20ක් සහ ලංකාවේ පුවත් 5ක් සොයා ගැනීම"""
+    """ලොව ප්‍රමුඛ අඩවි 20+, Google Trends 20 සහ ලංකාවේ Trends එකතු කිරීම"""
     found_items = []
     headers = {'User-Agent': 'Mozilla/5.0'}
     
-    # 1. Google Trends (Daily Trends 20)
+    # Google Trends (20 items)
     try:
         res = requests.get("https://trends.google.com/trends/trendingsearches/daily/rss?geo=US", headers=headers, timeout=10)
         soup = BeautifulSoup(res.content, 'xml')
         for item in soup.find_all('item')[:20]:
-            found_items.append({"title": item.title.text, "link": item.link.text, "tag": "Global Trend"})
+            found_items.append({"title": item.title.text, "link": item.link.text, "type": "Trending"})
     except: pass
 
-    # 2. Sri Lanka Trends (RSS පුවත් අඩවි 5ක්)
-    sl_sources = ["https://www.adaderana.lk/rss.php", "https://www.hirunews.lk/rss/sinhala.xml"]
-    for url in sl_sources:
+    # Global Media & War/Economic News (වෙබ් අඩවි 20ක් පමණ)
+    mega_feeds = [
+        "http://feeds.bbci.co.uk/news/world/rss.xml", "https://www.reutersagency.com/feed/",
+        "https://www.aljazeera.com/xml/rss/all.xml", "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
+        "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=10",
+        "https://www.nasa.gov/news-release/feed/", "https://techcrunch.com/feed/",
+        "https://www.military.com/rss-feeds/content?type=news", "https://www.theguardian.com/world/rss",
+        "https://www.sciencedaily.com/rss/all.xml"
+    ]
+    for url in mega_feeds:
+        try:
+            res = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(res.content, 'xml')
+            for item in soup.find_all('item')[:10]:
+                found_items.append({"title": item.title.text, "link": item.link.text, "type": "Analysis"})
+        except: pass
+
+    # Sri Lanka Trends (Top 5)
+    sl_feeds = ["https://www.hirunews.lk/rss/sinhala.xml", "http://www.adaderana.lk/rss.php"]
+    for url in sl_feeds:
         try:
             res = requests.get(url, headers=headers, timeout=10)
             soup = BeautifulSoup(res.content, 'xml')
             for item in soup.find_all('item')[:3]:
-                found_items.append({"title": item.title.text, "link": item.link.text, "tag": "SL Trend"})
+                found_items.append({"title": item.title.text, "link": item.link.text, "type": "SL_Trend"})
         except: pass
-
-    # 3. Global Media (වෙබ් අඩවි 20ක් පමණ ආවරණය වන පරිදි)
-    mega_sources = [
-        "https://www.reuters.com/world/", "https://www.bbc.com/news/world", 
-        "https://www.aljazeera.com/news/", "https://www.nasa.gov/news-release/",
-        "https://www.techcrunch.com/", "https://www.bloomberg.com/world",
-        "https://www.military.com/daily-news", "https://www.cnbc.com/world-politics/",
-        "https://www.sciencedaily.com/news/", "https://www.wired.com/"
-    ]
-    for url in mega_sources:
-        try:
-            res = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(res.text, 'html.parser')
-            for a in soup.find_all('a', href=True):
-                if len(a.text.strip()) > 60:
-                    l = a['href']
-                    if not l.startswith('http'): l = f"https://{url.split('/')[2]}{l}"
-                    found_items.append({"title": a.text.strip(), "link": l, "tag": "Global News"})
-                    if len(found_items) > 60: break
-        except: continue
-    
+        
     return found_items
 
 def process_and_send():
     translator = GoogleTranslator(source='auto', target='si')
-    news_list = get_sources()
     
-    # ලැයිස්තුවෙන් පුවත් කිහිපයක් තෝරා ගැනීම (විනාඩි 6ක Script එකක් සඳහා)
-    random.shuffle(news_list)
-    processed_count = 0
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r") as f:
+            processed_urls = f.read().splitlines()
+    else:
+        processed_urls = []
 
-    for item in news_list:
+    all_data = get_sources()
+    new_scripts_count = 0
+
+    for item in all_data:
+        if item['link'] in processed_urls:
+            continue
+
         try:
             article = Article(item['link'])
             article.download(); article.parse()
             
-            if len(article.text) < 1000: continue # දීර්ඝ ලිපි පමණක් තෝරා ගනී
+            # විනාඩි 6ක වොයිස් ඕවර් එකක් සඳහා දීර්ඝ අන්තර්ගතයක් අවශ්‍යයි
+            if len(article.text) < 1200: continue
 
-            # සිංහලට හැරවීම සහ සරල කිරීම
-            raw_title = translator.translate(item['title'])
-            clickbait_title = simplify_sinhala(make_clickbait(raw_title))
+            # සිංහලට පරිවර්තනය සහ සරල කිරීම
+            translated_title = translator.translate(item['title'])
+            final_title = simplify_sinhala(create_clickbait_title(translated_title))
             
-            # විනාඩි 6ක වොයිස් ඕවර් එකක් සඳහා වචන 800-1000ක් අවශ්‍යයි
-            full_body = translator.translate(article.text[:4500]) # උපරිම අකුරු 4500ක් ගනී
-            simple_body = simplify_sinhala(full_body)
+            # ගැඹුරු විශ්ලේෂණයක් සඳහා අකුරු 5000ක් දක්වා ගනී
+            body_si = translator.translate(article.text[:5000])
+            final_body = simplify_sinhala(body_si)
 
-            # Meta Data සැකසීම
-            keywords = f"{raw_title}, Sri Lanka News, Technology, Discovery, World News, Voiceover Sinhala"
-            tags = "#NewsSriLanka #Trending #Discovery #Technology #YouTubeSL"
+            # SEO Meta Data
+            meta_data = f"Keywords: {translated_title}, War News, Economy, SL Trends, Technology\nTags: #Trending #WarAnalysis #Voiceover #YouTubeSL #BreakingNews"
 
-            # සම්පූර්ණ පිටපත සැකසීම
-            script_msg = f"""
-🔥 *YOUTUBE 06-MINUTE SCRIPT* 🔥
+            full_script = f"""
+🎬 *YOUTUBE 06-MINUTE VIDEO SCRIPT*
 ━━━━━━━━━━━━━━━━━━━━━━
-📌 *මාතෘකාව:* {clickbait_title}
+🔴 *වීඩියෝ මාතෘකාව:* {final_title}
 
-👋 *Intro (තත්පර 30):*
-ආයුබෝවන් හැමෝටම! අද අපි අරගෙන ආවේ ලෝකයම හොල්ලපු, හැමෝම දැනගත යුතුම විශේෂ පුවතක්. මේ සිදුවීම පිටුපස තියෙන අබිරහස මොකක්ද? විනාඩි 6ක් පුරා අපි මේ ගැන සම්පූර්ණයෙන් කතා කරමු.
+👋 *Intro (කුතුහලය දනවන ආරම්භය):*
+ආයුබෝවන්! අද අපි කතා කරන්නේ මුළු ලෝකයේම අවධානය දිනාගත්, නමුත් බොහෝ දෙනෙක් ගැඹුරින් නොදන්නා විශේෂ පුවතක් ගැන. මේ වීඩියෝව අවසාන වෙනකොට ඔබ කිසිසේත්ම බලාපොරොත්තු නොවන දෙයක් දැනගන්න ලැබේවි.
 
-📖 *ප්‍රධාන පුවත (Main Content):*
-{simple_body}
+📝 *ගැඹුරු විශ්ලේෂණය (Main Content):*
+{final_body}
 
-🎬 *Outro:*
-ඉතින් මේ ගැන ඔයාලගේ අදහස මොකක්ද? පහළින් කමෙන්ට් කරන්න. මේ වගේ වීඩියෝ දිගටම බලන්න අපිව සබ්ස්ක්‍රයිබ් කරන්න. ස්තූතියි!
+🎬 *අවසානය (Call to Action):*
+ඉතින් මේ සිදුවීම ගැන ඔබ හිතන්නේ මොකක්ද? යුධමය තත්ත්වය හෝ ආර්ථිකය ගැන ඔබේ අදහස පහළින් කමෙන්ට් කරන්න. මේ වගේ ගැඹුරු විශ්ලේෂණ දිගටම බලන්න අපිව සබ්ස්ක්‍රයිබ් කරන්න!
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📊 *META DATA FOR SEO*
+📊 *SEO & META DATA*
 ━━━━━━━━━━━━━━━━━━━━━━
-🔑 *Keywords:* {keywords}
-🏷️ *Tags:* {tags}
-🔗 *Source:* {item['link']}
+{meta_data}
+
+🔗 *Original Source:* {item['link']}
 ━━━━━━━━━━━━━━━━━━━━━━
             """
-            send_telegram_msg(script_msg)
-            processed_count += 1
-            if processed_count >= 5: break # වරකට පිටපත් 5ක් යවයි
-            time.sleep(5)
-        except: continue
+
+            send_telegram_msg(full_script)
+            
+            # ලින්ක් එක සේව් කිරීම (නැවත පළ කිරීම වැළැක්වීමට)
+            with open(LOG_FILE, "a") as f:
+                f.write(item['link'] + "\n")
+            
+            new_scripts_count += 1
+            if new_scripts_count >= 3: break # වරකට ගැඹුරු ස්ක්‍රිප්ට් 3ක් පමණක් සකසයි
+            time.sleep(10)
+        except:
+            continue
 
 if __name__ == "__main__":
-    send_telegram_msg("🔄 *[SYSTEM]* පද්ධතිය පුවත් සෙවීම සහ Script සැකසීම ආරම්භ කළා...")
-    process_and_send()
-    send_telegram_msg("✅ *[SYSTEM]* සියලුම ස්ක්‍රිප්ට් ටෙලිග්‍රෑම් වෙත යවා අවසන්.")
+    # "Alive" පණිවිඩය වෙනම ත්‍රෙඩ් එකක ක්‍රියාත්මක කිරීම
+    Thread(target=keep_alive_ping).start()
+    
+    send_telegram_msg("🚀 *[SYSTEM START]* පුවත් විශ්ලේෂණ පද්ධතිය ආරම්භ කළා...")
+    
+    while True:
+        process_and_send()
+        time.sleep(1800) # සෑම පැය බාගයකටම වරක් අලුත් පුවත් පරීක්ෂා කරයි
