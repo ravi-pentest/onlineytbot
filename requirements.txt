@@ -3,5 +3,4 @@ beautifulsoup4
 newspaper3k
 deep_translator
 schedule
-flask
 lxml_html_clean
