@@ -2,8 +2,8 @@ name: News Bot Auto Run
 
 on:
   schedule:
-    # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට
-    - cron: '*/15 * * * *'
+    # සෑම විනාඩි 05කට වරක්ම ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට (GitHub හි අවම සීමාව)
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Manual run කිරීමට
 
 # එකම අවස්ථාවේ ධාවනයන් කිහිපයක් පෝලිමේ පිරීම වැළැක්වීමට
@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: uses/checkout@v3
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -38,7 +38,7 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        # මෙහිදී main.py එක තුල loop එකක් නොමැති බව තහවුරු කරගන්න
+        # මෙහිදී main.py එක තුල loop එකක් (While True) නොමැති බව තහවුරු කරගන්න
         run: python main.py
 
       # processed_urls.txt ගොනුව Repository එකට සේව් කිරීම
