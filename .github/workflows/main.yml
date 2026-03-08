@@ -2,8 +2,9 @@ name: News Bot Auto Run
 
 on:
   schedule:
-    - cron: '0 * * * *' # සෑම පැයකටම වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වේ
-  workflow_dispatch: # අපිට ඕන වෙලාවක බටන් එක ඔබලා රන් කරන්න
+    # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට (Every 15 minutes)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # අපට අවශ්‍ය වෙලාවට manual රන් කිරීමට
 
 jobs:
   build:
@@ -18,7 +19,8 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean
+        run: |
+          pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean schedule flask
 
       - name: Run Python Script
         env:
