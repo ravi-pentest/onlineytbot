@@ -4,9 +4,9 @@ on:
   schedule:
     # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට
     - cron: '*/15 * * * *'
-  workflow_dispatch: # Manual run කිරීමට
+  workflow_dispatch: # ඔබට අවශ්‍ය වෙලාවක 'Run workflow' බොත්තම එබීමට
 
-# එකම අවස්ථාවේ පණිවිඩ යැවීම් කිහිපයක් සිදුවීම වැළැක්වීමට
+# එකම අවස්ථාවේ ධාවනයන් කිහිපයක් පෝලිමේ පිරීම වැළැක්වීමට
 concurrency:
   group: news-bot-sync
   cancel-in-progress: true
@@ -14,6 +14,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # ලින්ක් සේව් කිරීමට Write permissions ලබා දීම
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -25,10 +30,21 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean schedule flask
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean
 
       - name: Run Python Script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+        # මෙහිදී Script එක එකවරක් රන් වී අවසන් විය යුතුය (while true ඉවත් කළ යුතුය)
         run: python main.py
+
+      # සේව් කළ ලින්ක් (processed_urls.txt) නැවත GitHub වෙත Update කිරීමට
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add processed_urls.txt || true
+          git commit -m "Update processed URLs [skip ci]" || true
+          git push || true
