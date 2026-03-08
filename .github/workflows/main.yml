@@ -4,7 +4,7 @@ on:
   schedule:
     # සෑම විනාඩි 15කට වරක් ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට
     - cron: '*/15 * * * *'
-  workflow_dispatch: # ඔබට අවශ්‍ය වෙලාවක 'Run workflow' බොත්තම එබීමට
+  workflow_dispatch: # Manual run කිරීමට
 
 # එකම අවස්ථාවේ ධාවනයන් කිහිපයක් පෝලිමේ පිරීම වැළැක්වීමට
 concurrency:
@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # ලින්ක් සේව් කිරීමට Write permissions ලබා දීම
+    # GitHub වෙත ගොනු සේව් කිරීමට අවශ්‍ය permissions ලබා දීම
     permissions:
       contents: write
 
@@ -31,20 +31,23 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean flask
+          # පද්ධතියට අවශ්‍ය සියලුම Libraries මෙහි ඇතුළත් කර ඇත
+          pip install requests beautifulsoup4 newspaper3k deep_translator lxml_html_clean flask schedule
 
       - name: Run Python Script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        # මෙහිදී Script එක එකවරක් රන් වී අවසන් විය යුතුය (while true ඉවත් කළ යුතුය)
+        # මෙහිදී main.py එක තුල loop එකක් නොමැති බව තහවුරු කරගන්න
         run: python main.py
 
-      # සේව් කළ ලින්ක් (processed_urls.txt) නැවත GitHub වෙත Update කිරීමට
+      # processed_urls.txt ගොනුව Repository එකට සේව් කිරීම
       - name: Commit and Push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add processed_urls.txt || true
-          git commit -m "Update processed URLs [skip ci]" || true
-          git push || true
+          # processed_urls.txt ගොනුව නැතිනම් සාදා ගැනීම
+          touch processed_urls.txt
+          git add processed_urls.txt
+          git commit -m "Update processed URLs [skip ci]" || echo "No changes to commit"
+          git push || echo "Push failed or no changes"
