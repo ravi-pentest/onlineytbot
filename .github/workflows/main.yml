@@ -3,7 +3,7 @@ name: News Bot Auto Run
 on:
   schedule:
     # සෑම විනාඩි 05කට වරක්ම ස්වයංක්‍රීයව ක්‍රියාත්මක වීමට
-    - cron: '*/5 * * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch: # Manual run කිරීමට
 
 concurrency:
